@@ -31,7 +31,13 @@ yarn-error.*
 *.pem
 
 # local env files
+<<<<<<< HEAD
 .env*.local
+=======
+.env
+.env*.local
+!.env.example
+>>>>>>> 35d1dd8 (Adding home dashboard and AI assitance)
 
 # typescript
 *.tsbuildinfo
