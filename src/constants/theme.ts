@@ -1,35 +1,14 @@
 /**
-<<<<<<< HEAD
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
-=======
  * Iskhwama design tokens.
  *
  * The palette is built around a deep "clover" green paired with clean white
  * surfaces, so every screen reads as one brand instead of stock React Native.
->>>>>>> 35d1dd8 (Adding home dashboard and AI assitance)
  */
 
 import '@/global.css';
 
 import { Platform } from 'react-native';
 
-<<<<<<< HEAD
-export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-  },
-  dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-=======
 export const Brand = {
   green: '#12784A',
   greenDark: '#0B5A36',
@@ -82,7 +61,6 @@ export const Colors = {
     dangerSoft: '#2A1613',
     warning: '#F0B45E',
     shadow: '#000000',
->>>>>>> 35d1dd8 (Adding home dashboard and AI assitance)
   },
 } as const;
 
@@ -123,8 +101,6 @@ export const Spacing = {
   six: 64,
 } as const;
 
-<<<<<<< HEAD
-=======
 export const Radius = {
   sm: 10,
   md: 14,
@@ -133,6 +109,5 @@ export const Radius = {
   pill: 999,
 } as const;
 
->>>>>>> 35d1dd8 (Adding home dashboard and AI assitance)
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;

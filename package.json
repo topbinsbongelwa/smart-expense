@@ -13,10 +13,7 @@
     "expo-device": "~57.0.2",
     "expo-font": "~57.0.4",
     "expo-glass-effect": "~57.0.4",
-<<<<<<< HEAD
-=======
     "expo-haptics": "~57.0.3",
->>>>>>> 35d1dd8 (Adding home dashboard and AI assitance)
     "expo-image": "~57.0.5",
     "expo-linking": "~57.0.11",
     "expo-router": "~57.0.23",
@@ -25,10 +22,7 @@
     "expo-symbols": "~57.0.3",
     "expo-system-ui": "~57.0.4",
     "expo-web-browser": "~57.0.3",
-<<<<<<< HEAD
-=======
     "firebase": "^12.19.0",
->>>>>>> 35d1dd8 (Adding home dashboard and AI assitance)
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
@@ -41,11 +35,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-<<<<<<< HEAD
-=======
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
->>>>>>> 35d1dd8 (Adding home dashboard and AI assitance)
     "typescript": "~6.0.3"
   },
   "scripts": {
