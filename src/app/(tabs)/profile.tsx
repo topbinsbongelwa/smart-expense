@@ -9,10 +9,8 @@ import { AppButton } from '@/components/app-button';
 import { BrandMark } from '@/components/brand';
 import { Card } from '@/components/card';
 import { Brand, MaxContentWidth, Radius } from '@/constants/theme';
-import {
-  useMonthBreakdown,
-  useMonthlyTotals,
-} from '@/hooks/use-expense-analytics';
+import { useMonthBreakdown, useMonthlyTotals } from '@/hooks/use-expense-analytics';
+import { useAuth } from '@/hooks/use-auth';
 import { useExpenses, useExpenseSummary } from '@/hooks/use-expenses';
 import { initials, useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
@@ -24,6 +22,7 @@ export default function ProfileScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { expenses, clearExpenses, restoreSampleData, hydrated } = useExpenses();
   const { profile, setName, setMonthlyGoal } = useProfile();
+  const { account } = useAuth();
 
   const [draftName, setDraftName] = useState(profile.name);
   const [draftGoal, setDraftGoal] = useState((profile.monthlyGoal / 100).toFixed(0));
@@ -69,7 +68,8 @@ export default function ProfileScreen() {
             <View style={styles.profileBody}>
               <Text style={[styles.profileName, { color: theme.text }]}>{profile.name}</Text>
               <Text style={[styles.profileMeta, { color: theme.textMuted }]}>
-                {firstTracked ? `Tracking since ${firstTracked}` : 'No entries yet'}
+                {account?.email ??
+                  (firstTracked ? `Tracking since ${firstTracked}` : 'No entries yet')}
               </Text>
             </View>
             <BrandMark size={40} />
@@ -170,7 +170,8 @@ export default function ProfileScreen() {
         <Card style={styles.formCard}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Data</Text>
           <Text style={[styles.cardHint, { color: theme.textSecondary }]}>
-            Everything lives on this device in local storage. No account, no sync, no tracking.
+            Your expenses stay on this device. Signing in only uses your email and name — nothing is
+            uploaded and nothing is sold.
           </Text>
 
           <View style={styles.dataActions}>

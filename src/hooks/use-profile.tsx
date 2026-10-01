@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { useAuth } from '@/hooks/use-auth';
+
 const STORAGE_KEY = 'iskhwama.profile.v1';
 
 export type Profile = {
+  /** Mirrors the Firebase display name so the greeting and this card agree. */
   name: string;
   /** Set by the user once the app is installed, drives the greeting copy. */
   monthlyGoal: number;
@@ -24,6 +27,7 @@ type ProfileContextValue = {
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
+  const { account, updateName } = useAuth();
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [hydrated, setHydrated] = useState(false);
 
@@ -59,17 +63,28 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profile)).catch(() => undefined);
   }, [profile, hydrated]);
 
-  const setName = useCallback((name: string) => {
-    setProfile((current) => ({ ...current, name: name.trim().slice(0, 24) || DEFAULT_PROFILE.name }));
-  }, []);
+  const setName = useCallback(
+    (name: string) => {
+      const clean = name.trim().slice(0, 24) || DEFAULT_PROFILE.name;
+      setProfile((current) => ({ ...current, name: clean }));
+      void updateName(clean);
+    },
+    [updateName]
+  );
 
   const setMonthlyGoal = useCallback((monthlyGoal: number) => {
     setProfile((current) => ({ ...current, monthlyGoal: Math.max(0, Math.round(monthlyGoal)) }));
   }, []);
 
+  /** Firebase owns the name while signed in, so the cached one is the fallback. */
   const value = useMemo<ProfileContextValue>(
-    () => ({ profile, hydrated, setName, setMonthlyGoal }),
-    [profile, hydrated, setName, setMonthlyGoal]
+    () => ({
+      profile: { ...profile, name: account?.name ?? profile.name },
+      hydrated,
+      setName,
+      setMonthlyGoal,
+    }),
+    [account?.name, profile, hydrated, setName, setMonthlyGoal]
   );
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;

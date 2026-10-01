@@ -1,15 +1,18 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  updateProfile,
+  type User,
+} from 'firebase/auth';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-const STORAGE_KEY = 'iskhwama.auth.v1';
+import { describeAuthError } from '@/lib/auth-errors';
+import { firebaseAuth } from '@/lib/firebase';
+import { FIREBASE_SETUP_MESSAGE, isFirebaseConfigured } from '@/lib/firebase-config';
+import { isValidEmail, normaliseEmail, validatePassword } from '@/lib/validation';
 
 export type Account = {
   name: string;
@@ -25,124 +28,127 @@ type SignUpInput = Credentials & { name: string };
 type AuthContextValue = {
   account: Account | null;
   hydrated: boolean;
+  /** False until a Firebase web config is present in .env. */
+  configured: boolean;
   signIn: (input: Credentials) => Promise<AuthResult>;
   signUp: (input: SignUpInput) => Promise<AuthResult>;
-  signOut: () => void;
+  sendPasswordReset: (email: string) => Promise<AuthResult>;
+  /** Renames the account in Firebase so the name follows the user across devices. */
+  updateName: (name: string) => Promise<void>;
+  signOut: () => Promise<void>;
 };
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const DEFAULT_NAME = 'Iskhwama user';
-
-function normaliseEmail(value: string) {
-  return value.trim().toLowerCase();
-}
-
-export function validatePassword(password: string): string | null {
-  if (password.length < 8) return 'Passwords need at least 8 characters.';
-  if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
-    return 'Mix in at least one letter and one number.';
-  }
-  return null;
+function toAccount(user: User): Account {
+  return {
+    name: user.displayName?.trim() || user.email?.split('@')[0] || 'Iskhwama user',
+    email: user.email ?? '',
+    createdAt: user.metadata.creationTime ? Date.parse(user.metadata.creationTime) : Date.now(),
+  };
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  // Without a config there is no session to wait for, so treat it as resolved.
+  const [hydrated, setHydrated] = useState(!isFirebaseConfigured);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!firebaseAuth) return;
+    return onAuthStateChanged(firebaseAuth, (user) => {
+      setAccount(user ? toAccount(user) : null);
+      setHydrated(true);
+    });
+  }, []);
 
-    async function load() {
-      try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        const parsed = raw ? (JSON.parse(raw) as Partial<Account>) : null;
-        if (!cancelled && parsed && typeof parsed.email === 'string') {
-          setAccount({
-            name: typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : DEFAULT_NAME,
-            email: parsed.email,
-            createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : Date.now(),
-          });
-        }
-      } catch {
-        // Treat unreadable storage as "signed out".
-      } finally {
-        if (!cancelled) setHydrated(true);
-      }
+  const signUp = useCallback(async ({ name, email, password }: SignUpInput): Promise<AuthResult> => {
+    if (!firebaseAuth) return { ok: false, message: FIREBASE_SETUP_MESSAGE };
+
+    const cleanName = name.trim();
+    if (cleanName.length < 2) return { ok: false, message: 'Tell us what to call you.' };
+    const mail = normaliseEmail(email);
+    if (!isValidEmail(mail)) {
+      return { ok: false, message: 'That email address does not look right.' };
+    }
+    const passwordProblem = validatePassword(password);
+    if (passwordProblem) return { ok: false, message: passwordProblem };
+
+    try {
+      const credential = await createUserWithEmailAndPassword(firebaseAuth, mail, password);
+      await updateProfile(credential.user, { displayName: cleanName.slice(0, 24) });
+      // The auth listener does not re-fire for a profile update, so mirror it here.
+      setAccount(toAccount(credential.user));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: describeAuthError(error, 'Could not create that account. Try again.') };
+    }
+  }, []);
+
+  const signIn = useCallback(async ({ email, password }: Credentials): Promise<AuthResult> => {
+    if (!firebaseAuth) return { ok: false, message: FIREBASE_SETUP_MESSAGE };
+
+    const mail = normaliseEmail(email);
+    if (!isValidEmail(mail)) {
+      return { ok: false, message: 'That email address does not look right.' };
+    }
+    if (password.length === 0) return { ok: false, message: 'Add your password.' };
+
+    try {
+      await signInWithEmailAndPassword(firebaseAuth, mail, password);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: describeAuthError(error, 'Could not sign you in. Try again.') };
+    }
+  }, []);
+
+  const sendPasswordReset = useCallback(async (email: string): Promise<AuthResult> => {
+    if (!firebaseAuth) return { ok: false, message: FIREBASE_SETUP_MESSAGE };
+
+    const mail = normaliseEmail(email);
+    if (!isValidEmail(mail)) {
+      return { ok: false, message: 'Add the email address on your account.' };
     }
 
-    load();
-    return () => {
-      cancelled = true;
-    };
+    try {
+      await sendPasswordResetEmail(firebaseAuth, mail);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: describeAuthError(error, 'Could not send that email. Try again.') };
+    }
   }, []);
 
-  const persist = useCallback((next: Account | null) => {
-    setAccount(next);
-    const write = next
-      ? AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      : AsyncStorage.removeItem(STORAGE_KEY);
-    write.catch(() => undefined);
+  const updateName = useCallback(async (name: string) => {
+    const clean = name.trim().slice(0, 24);
+    if (!firebaseAuth?.currentUser || clean.length < 2) return;
+    try {
+      await updateProfile(firebaseAuth.currentUser, { displayName: clean });
+      setAccount(toAccount(firebaseAuth.currentUser));
+    } catch {
+      // The local name still applies, so a failed sync is not worth interrupting for.
+    }
   }, []);
 
-  /**
-   * Device-only account: the password is validated for strength and then
-   * discarded. Nothing is hashed or stored until there is a real server to
-   * authenticate against, and it is never written to storage or logs.
-   */
-  const signIn = useCallback(
-    async ({ email, password }: Credentials): Promise<AuthResult> => {
-      const mail = normaliseEmail(email);
-      if (!EMAIL_PATTERN.test(mail)) {
-        return { ok: false, message: 'That email address does not look right.' };
-      }
-      const passwordProblem = validatePassword(password);
-      if (passwordProblem) {
-        return { ok: false, message: passwordProblem };
-      }
-      if (account && account.email !== mail) {
-        return {
-          ok: false,
-          message: 'No Iskhwama account on this device for that email. Create one instead.',
-        };
-      }
-
-      persist(account ?? { name: DEFAULT_NAME, email: mail, createdAt: Date.now() });
-      return { ok: true };
-    },
-    [account, persist]
-  );
-
-  const signUp = useCallback(
-    async ({ name, email, password }: SignUpInput): Promise<AuthResult> => {
-      const cleanName = name.trim();
-      if (cleanName.length < 2) {
-        return { ok: false, message: 'Tell us what to call you.' };
-      }
-      const mail = normaliseEmail(email);
-      if (!EMAIL_PATTERN.test(mail)) {
-        return { ok: false, message: 'That email address does not look right.' };
-      }
-      const passwordProblem = validatePassword(password);
-      if (passwordProblem) {
-        return { ok: false, message: passwordProblem };
-      }
-      if (account?.email === mail) {
-        return { ok: false, message: 'You already have an account for that email. Sign in instead.' };
-      }
-
-      persist({ name: cleanName.slice(0, 24), email: mail, createdAt: Date.now() });
-      return { ok: true };
-    },
-    [account, persist]
-  );
-
-  const signOut = useCallback(() => persist(null), [persist]);
+  const signOut = useCallback(async () => {
+    if (!firebaseAuth) return;
+    try {
+      await firebaseSignOut(firebaseAuth);
+    } catch {
+      // The listener drives the redirect either way.
+    }
+  }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ account, hydrated, signIn, signUp, signOut }),
-    [account, hydrated, signIn, signUp, signOut]
+    () => ({
+      account,
+      hydrated,
+      configured: isFirebaseConfigured,
+      signIn,
+      signUp,
+      sendPasswordReset,
+      updateName,
+      signOut,
+    }),
+    [account, hydrated, signIn, signUp, sendPasswordReset, updateName, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

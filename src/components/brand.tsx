@@ -2,12 +2,13 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image, type ImageSource } from 'expo-image';
 import { StyleSheet, Text, View, type ViewProps } from 'react-native';
 
+import { APP_LOGO } from '@/constants/logo';
 import { Brand } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export function BrandMark({
   size = 44,
-  logo,
+  logo = APP_LOGO,
   onBrand = false,
 }: {
   size?: number;

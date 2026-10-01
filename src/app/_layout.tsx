@@ -19,6 +19,9 @@ import { ProfileProvider, useProfile } from '@/hooks/use-profile';
 
 SplashScreen.preventAutoHideAsync();
 
+/** The auth flow runs welcome -> signup -> login, then the app takes over. */
+const AUTH_ROUTES = ['welcome', 'signup', 'login'];
+
 function IskhwamaNavigator() {
   const scheme = useColorScheme();
   const palette = scheme === 'dark' ? Colors.dark : Colors.light;
@@ -27,7 +30,7 @@ function IskhwamaNavigator() {
   const { hydrated: expensesReady } = useExpenses();
   const { hydrated: profileReady } = useProfile();
   const hydrated = authReady && expensesReady && profileReady;
-  const onLogin = segments[0] === 'login';
+  const onAuthScreen = AUTH_ROUTES.includes(segments[0] ?? '');
 
   useEffect(() => {
     if (hydrated) SplashScreen.hideAsync();
@@ -36,12 +39,12 @@ function IskhwamaNavigator() {
   /** Nothing renders until the account is known, then the right screen wins. */
   useEffect(() => {
     if (!hydrated) return;
-    if (!account && !onLogin) {
-      router.replace('/login');
-    } else if (account && onLogin) {
+    if (!account && !onAuthScreen) {
+      router.replace('/welcome');
+    } else if (account && onAuthScreen) {
       router.replace('/(tabs)');
     }
-  }, [hydrated, account, onLogin]);
+  }, [hydrated, account, onAuthScreen]);
 
   const navigationTheme: Theme = {
     ...(scheme === 'dark' ? DarkTheme : DefaultTheme),
@@ -63,7 +66,9 @@ function IskhwamaNavigator() {
           headerShown: false,
           contentStyle: { backgroundColor: palette.background },
         }}>
-        <Stack.Screen name="login" options={{ animation: 'fade' }} />
+        <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
+        <Stack.Screen name="signup" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="login" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="expense/[id]"

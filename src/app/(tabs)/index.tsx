@@ -144,7 +144,7 @@ export default function DashboardScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Confirm sign out"
-                    onPress={signOut}
+                    onPress={() => void signOut()}
                     style={({ pressed }) => [
                       styles.confirmPill,
                       { backgroundColor: theme.dangerSoft, opacity: pressed ? 0.7 : 1 },
