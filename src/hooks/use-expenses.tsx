@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import type { CategoryId, Expense } from '@/constants/categories';
+import { saveExpenses } from '@/lib/firestore';
 
 const STORAGE_KEY = 'iskhwama.expenses.v1';
 export const MONTHLY_SPEND_TARGET = 6_000_00;
@@ -105,6 +106,8 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(expenses)).catch(() => undefined);
+    // Best-effort Firestore mirror (falls back to the temp stub in .env's absence).
+    void saveExpenses(expenses);
   }, [expenses, hydrated]);
 
   const addExpense = useCallback((input: NewExpenseInput) => {

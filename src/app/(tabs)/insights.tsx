@@ -17,6 +17,7 @@ import { AppButton } from '@/components/app-button';
 import { Card } from '@/components/card';
 import { getCategory } from '@/constants/categories';
 import { Brand, MaxContentWidth, Radius } from '@/constants/theme';
+import { useManusChat } from '@/hooks/use-manus-chat';
 import {
   useLargestExpense,
   useMonthBreakdown,
@@ -27,13 +28,9 @@ import { useExpenses, useExpenseSummary } from '@/hooks/use-expenses';
 import { useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
 import { buildInsights, buildWeeklySummary, type InsightTone } from '@/lib/insights';
-import { successFeedback, tapFeedback } from '@/lib/haptics';
+import { tapFeedback } from '@/lib/haptics';
 import { formatMoney } from '@/lib/money';
-import { answerSimuQuestion, SIMU_INTRO, SIMU_SUGGESTIONS, type SimuMessage } from '@/lib/simu';
-
-function makeId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
+import { MANUS_INTRO, MANUS_SUGGESTIONS } from '@/lib/manus';
 
 export default function InsightsScreen() {
   const theme = useTheme();
@@ -46,25 +43,15 @@ export default function InsightsScreen() {
   const weekdays = useWeekdayTotals(expenses);
   const largest = useLargestExpense(expenses);
   const [showSummary, setShowSummary] = useState(false);
+  const chat = useManusChat();
 
-  const [messages, setMessages] = useState<SimuMessage[]>([]);
-  const [draft, setDraft] = useState('');
-  const [thinking, setThinking] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    },
-    []
-  );
 
   useEffect(() => {
-    if (messages.length === 0 && !thinking) return;
+    if (chat.messages.length === 0 && !chat.thinking) return;
     const frame = requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
     return () => cancelAnimationFrame(frame);
-  }, [messages.length, thinking]);
+  }, [chat.messages.length, chat.thinking]);
 
   const busiest = useMemo(
     () => weekdays.reduce((best, day) => (day.total > best.total ? day : best), weekdays[0]),
@@ -88,46 +75,6 @@ export default function InsightsScreen() {
     [expenses, summary, trend, breakdown, largest, busiest]
   );
 
-  const simuContext = useMemo(
-    () => ({
-      expenses,
-      monthTotal: summary.monthTotal,
-      monthCount: summary.monthCount,
-      todayTotal: summary.todayTotal,
-      averagePerDay: summary.averagePerDay,
-      breakdown: breakdown.map((item) => ({
-        categoryId: item.categoryId,
-        label: item.label,
-        total: item.total,
-      })),
-      weekTotal: trend.thisWeekTotal,
-      weekChange: trend.change,
-      largest,
-      goal: profile.monthlyGoal,
-      daysElapsed: summary.daysElapsed,
-      daysInMonth: summary.daysInMonth,
-      weekdays,
-    }),
-    [expenses, summary, breakdown, trend, largest, profile.monthlyGoal, weekdays]
-  );
-
-  function send(raw?: string) {
-    const text = (raw ?? draft).trim();
-    if (text.length === 0 || thinking) return;
-    tapFeedback();
-    setDraft('');
-    setMessages((current) => [...current, { id: makeId(), role: 'user', text }]);
-    setThinking(true);
-
-    timerRef.current = setTimeout(() => {
-      const answer = answerSimuQuestion(text, simuContext);
-      setMessages((current) => [...current, { id: makeId(), role: 'simu', text: answer }]);
-      setThinking(false);
-      timerRef.current = null;
-      successFeedback();
-    }, 650);
-  }
-
   const toneColors: Record<InsightTone, { background: string; accent: string }> = {
     positive: { background: theme.primarySoft, accent: theme.primary },
     warning: { background: theme.dangerSoft, accent: theme.danger },
@@ -135,7 +82,6 @@ export default function InsightsScreen() {
   };
 
   const progress = profile.monthlyGoal > 0 ? Math.min(1, summary.monthTotal / profile.monthlyGoal) : 0;
-  const canSend = draft.trim().length > 0 && !thinking;
 
   const avatar = (
     <View style={[styles.avatar, { backgroundColor: theme.primarySoft }]}>
@@ -156,29 +102,29 @@ export default function InsightsScreen() {
           { paddingBottom: 28, paddingTop: insets.top + 12 },
         ]}>
         <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: theme.textMuted }]}>Simu AI</Text>
+          <Text style={[styles.eyebrow, { color: theme.textMuted }]}>Manus AI</Text>
           <Text style={[styles.title, { color: theme.text }]}>Your money coach</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Ask Simu anything about your spending — every answer is generated on-device from your own
-            entries. Nothing leaves your phone.
+            Ask Manus anything about your spending — answers use your own entries, from the cloud
+            when connected and on-device when offline.
           </Text>
         </View>
 
-        {messages.length === 0 ? (
+        {chat.messages.length === 0 ? (
           <>
             <View style={styles.messageRow}>
               {avatar}
               <View style={[styles.bubble, styles.bubbleSimu, { backgroundColor: theme.backgroundElement }]}>
-                <Text style={[styles.bubbleText, { color: theme.text }]}>{SIMU_INTRO(profile.name)}</Text>
+                <Text style={[styles.bubbleText, { color: theme.text }]}>{MANUS_INTRO(profile.name)}</Text>
               </View>
             </View>
 
             <View style={styles.chipWrap}>
-              {SIMU_SUGGESTIONS.map((suggestion) => (
+              {MANUS_SUGGESTIONS.map((suggestion) => (
                 <Pressable
                   key={suggestion}
                   accessibilityRole="button"
-                  onPress={() => send(suggestion)}
+                  onPress={() => chat.send(suggestion)}
                   style={({ pressed }) => [
                     styles.chip,
                     {
@@ -256,7 +202,7 @@ export default function InsightsScreen() {
                 </Text>
               ) : (
                 <Text style={[styles.summaryText, { color: theme.textMuted }]}>
-                  Tap below and Simu will read your week back to you in plain language.
+                  Tap below and Manus will read your week back to you in plain language.
                 </Text>
               )}
 
@@ -277,14 +223,14 @@ export default function InsightsScreen() {
                 <Text style={[styles.footerTitle, { color: theme.text }]}>Coach&apos;s note</Text>
                 <Text style={[styles.footerText, { color: theme.textSecondary }]}>
                   Right now {getCategory(summary.topCategoryId).label.toLowerCase()} is your biggest
-                  bucket. Ask Simu a question above and it will compare your pace against your target.
+                  bucket. Ask Manus a question above and it will compare your pace against your target.
                 </Text>
               </Card>
             ) : null}
           </>
         ) : (
           <>
-            {messages.map((message) =>
+            {chat.messages.map((message) =>
               message.role === 'user' ? (
                 <View key={message.id} style={[styles.messageRow, styles.messageRowUser]}>
                   <View style={[styles.bubble, styles.bubbleUser, { backgroundColor: theme.primary }]}>
@@ -302,7 +248,7 @@ export default function InsightsScreen() {
               )
             )}
 
-            {thinking ? (
+            {chat.thinking ? (
               <View style={styles.messageRow}>
                 {avatar}
                 <View
@@ -313,7 +259,7 @@ export default function InsightsScreen() {
                     { backgroundColor: theme.backgroundElement },
                   ]}>
                   <ActivityIndicator size="small" color={theme.primary} />
-                  <Text style={[styles.thinkingText, { color: theme.textMuted }]}>Simu is thinking…</Text>
+                  <Text style={[styles.thinkingText, { color: theme.textMuted }]}>Manus is thinking…</Text>
                 </View>
               </View>
             ) : null}
@@ -323,10 +269,7 @@ export default function InsightsScreen() {
               icon="refresh"
               variant="ghost"
               style={styles.clearButton}
-              onPress={() => {
-                tapFeedback();
-                setMessages([]);
-              }}
+              onPress={chat.clear}
             />
           </>
         )}
@@ -335,12 +278,12 @@ export default function InsightsScreen() {
       <View
         style={[styles.composer, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
         <TextInput
-          value={draft}
-          onChangeText={setDraft}
-          placeholder="Ask Simu about your money…"
+          value={chat.draft}
+          onChangeText={chat.setDraft}
+          placeholder="Ask Manus about your money…"
           placeholderTextColor={theme.textMuted}
           returnKeyType="send"
-          onSubmitEditing={() => send()}
+          onSubmitEditing={() => chat.send()}
           blurOnSubmit={false}
           style={[
             styles.composerInput,
@@ -350,13 +293,13 @@ export default function InsightsScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Send question"
-          disabled={!canSend}
-          onPress={() => send()}
+          disabled={!chat.canSend}
+          onPress={() => chat.send()}
           style={({ pressed }) => [
             styles.sendButton,
             {
               backgroundColor: theme.primary,
-              opacity: !canSend ? 0.4 : pressed ? 0.85 : 1,
+              opacity: !chat.canSend ? 0.4 : pressed ? 0.85 : 1,
             },
           ]}>
           <Ionicons name="arrow-up" size={20} color={theme.onBrand} />

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { useAuth } from '@/hooks/use-auth';
+import { saveProfile } from '@/lib/firestore';
 
 const STORAGE_KEY = 'iskhwama.profile.v1';
 
@@ -61,6 +62,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profile)).catch(() => undefined);
+    // Best-effort Firestore mirror (falls back to the temp stub in .env's absence).
+    void saveProfile(profile);
   }, [profile, hydrated]);
 
   const setName = useCallback(
