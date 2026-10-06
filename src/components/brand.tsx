@@ -1,10 +1,38 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image, type ImageSource } from 'expo-image';
 import { StyleSheet, Text, View, type ViewProps } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { APP_LOGO } from '@/constants/logo';
-import { Brand } from '@/constants/theme';
+import { Brand, Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+
+/**
+ * The Iskhwama mark: a bold trend line that breaks upward into an arrow.
+ * Pure vector, so it stays razor-sharp from 24px badges to 56px heroes.
+ */
+const GLYPH_LINE = 'M20 70L40 50L52 60L77.9 29.4';
+const GLYPH_HEAD = 'M76.4 46.3L77.9 29.4L61.5 33.8';
+
+function BrandGlyph({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+      <Path
+        d={GLYPH_LINE}
+        stroke={Brand.white}
+        strokeWidth={10}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d={GLYPH_HEAD}
+        stroke={Brand.white}
+        strokeWidth={10}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 export function BrandMark({
   size = 44,
@@ -12,7 +40,7 @@ export function BrandMark({
   onBrand = false,
 }: {
   size?: number;
-  logo?: ImageSource;
+  logo?: ImageSource | null;
   onBrand?: boolean;
 }) {
   const theme = useTheme();
@@ -24,16 +52,31 @@ export function BrandMark({
         {
           width: size,
           height: size,
-          borderRadius: size * 0.32,
-          backgroundColor: onBrand ? 'rgba(255,255,255,0.18)' : theme.background,
-          borderColor: onBrand ? 'rgba(255,255,255,0.3)' : theme.border,
+          borderRadius: size * 0.3,
+          backgroundColor: onBrand ? 'rgba(255,255,255,0.14)' : theme.background,
+          borderColor: onBrand ? 'rgba(255,255,255,0.32)' : theme.border,
         },
+        onBrand ? null : styles.markShadow,
       ]}>
       {logo ? (
-        <Image source={logo} style={{ width: size * 0.72, height: size * 0.72 }} contentFit="contain" />
+        <Image
+          source={logo}
+          style={{ width: size * 0.72, height: size * 0.72 }}
+          contentFit="contain"
+        />
       ) : (
-        <View style={[styles.tile, { width: size * 0.58, height: size * 0.58, borderRadius: size * 0.2 }]}>
-          <Ionicons name="cash" size={size * 0.3} color="#FFFFFF" />
+        <View
+          style={[
+            styles.tile,
+            {
+              width: size * 0.8,
+              height: size * 0.8,
+              borderRadius: size * 0.24,
+              backgroundColor: onBrand ? 'rgba(255,255,255,0.18)' : 'transparent',
+            },
+            onBrand ? null : styles.tileGradient,
+          ]}>
+          <BrandGlyph size={size * 0.62} />
         </View>
       )}
     </View>
@@ -67,9 +110,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
   },
+  markShadow: {
+    boxShadow: '0 6px 16px rgba(8, 64, 42, 0.14)',
+  },
   tile: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tileGradient: {
     experimental_backgroundImage: Brand.gradientFab,
   },
   row: {
@@ -78,13 +126,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   wordmark: {
-    fontSize: 22,
+    fontFamily: Fonts.rounded,
+    fontSize: 23,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: -0.8,
   },
   subtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 1,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginTop: 2,
   },
 });

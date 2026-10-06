@@ -82,6 +82,71 @@ function isThisMonth(dateKey: string): boolean {
   return year === now.getFullYear() && month === now.getMonth() + 1;
 }
 
+/** Total and count for a month relative to now (`-1` = last calendar month). */
+function monthTotalAt(ctx: SimuContext, offset: number): { total: number; count: number } {
+  const now = new Date();
+  const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const year = target.getFullYear();
+  const month = target.getMonth() + 1;
+  let total = 0;
+  let count = 0;
+  for (const expense of ctx.expenses) {
+    const [expenseYear, expenseMonth] = expense.date.split('-').map(Number);
+    if (expenseYear === year && expenseMonth === month) {
+      total += expense.amount;
+      count += 1;
+    }
+  }
+  return { total, count };
+}
+
+/** Rich dashboard reply for open questions — what a good analyst would open with. */
+function quickSnapshot(ctx: SimuContext): string {
+  const lines: string[] = [];
+  lines.push(
+    `This month: ${formatMoney(ctx.monthTotal)} across ${plural(ctx.monthCount, 'entry')} — ${formatMoney(ctx.todayTotal)} so far today.`
+  );
+
+  if (ctx.goal > 0) {
+    const percent = Math.round((ctx.monthTotal / ctx.goal) * 100);
+    lines.push(
+      percent <= 100
+        ? `Target ${formatMoney(ctx.goal)} — ${percent}% used, ${formatMoney(ctx.goal - ctx.monthTotal)} still free.`
+        : `Target ${formatMoney(ctx.goal)} — ${percent}% used, you are ${formatMoney(ctx.monthTotal - ctx.goal)} over.`
+    );
+  }
+
+  const top = ctx.breakdown[0];
+  if (top && ctx.monthTotal > 0) {
+    const share = Math.round((top.total / ctx.monthTotal) * 100);
+    lines.push(`${top.label} leads at ${formatMoney(top.total)} (${share}% of the month).`);
+  }
+
+  if (ctx.weekChange !== null) {
+    lines.push(
+      `Last 7 days ran ${Math.abs(Math.round(ctx.weekChange * 100))}% ${
+        ctx.weekChange > 0 ? 'higher' : 'lower'
+      } than the week before.`
+    );
+  }
+
+  if (ctx.goal > 0) {
+    const safe = safeToSpendToday({
+      goal: ctx.goal,
+      spent: ctx.monthTotal,
+      daysElapsed: ctx.daysElapsed,
+      daysInMonth: ctx.daysInMonth,
+    });
+    lines.push(
+      safe.remaining > 0
+        ? `Safe to spend today: ${formatMoney(safe.amount)}.`
+        : `Budget is used up — ${formatMoney(ctx.monthTotal - ctx.goal)} over target.`
+    );
+  }
+
+  return `Here is where you stand:\n• ${lines.join('\n• ')}`;
+}
+
 function tipFor(ctx: SimuContext): string {
   const { goal, monthTotal, breakdown, weekChange, averagePerDay, daysElapsed, daysInMonth } = ctx;
 
@@ -126,11 +191,11 @@ export function answerSimuQuestion(question: string, ctx: SimuContext): string {
   if (
     includes(q, 'what can you do', 'what do you do', 'who are you', 'your name', 'how do you work', 'features', 'how does this work')
   ) {
-    return 'I am Simu, your on-device money assistant. Ask me about totals for this month or week, spending by category, your biggest expense, your goal progress, how much is safe to spend today, or just say "give me a tip".';
+    return 'I am Manus AI, running in offline mode on your device. Ask me about totals this month or week, category splits, goal progress, pace vs last month, what is safe to spend today, or just say "give me a tip".';
   }
 
   if (/^(hi|hello|hey|yo|hiya|how are you|good (morning|afternoon|evening))\b/.test(q)) {
-    return 'Hi there! Ask me a question or tap one of the suggestions below.';
+    return 'Hi there! Ask me anything about your money — totals, categories, pace, forecasts — or tap a suggestion below.';
   }
 
   if (includes(q, 'thank', 'cheers', 'appreciate')) {
@@ -292,6 +357,24 @@ export function answerSimuQuestion(question: string, ctx: SimuContext): string {
     return `At your current pace you will finish the month near ${formatMoney(projection)}. ${verdict}`;
   }
 
+  if (includes(q, 'last month', 'previous month', 'month before', 'compared to last', 'versus last')) {
+    const last = monthTotalAt(ctx, -1);
+    if (last.total === 0 && ctx.monthTotal === 0) {
+      return 'Neither this month nor last month has any entries yet, so there is nothing to compare.';
+    }
+    const diff = ctx.monthTotal - last.total;
+    const direction = diff >= 0 ? 'more' : 'less';
+    const paceNote =
+      ctx.daysElapsed < ctx.daysInMonth
+        ? ` Bear in mind this month is only ${ctx.daysElapsed} days in.`
+        : '';
+    return `You have spent ${formatMoney(ctx.monthTotal)} this month vs ${formatMoney(
+      last.total
+    )} last month — ${formatMoney(Math.abs(diff))} ${direction}${
+      last.count > 0 ? ` (last month logged ${plural(last.count, 'entry')})` : ''
+    }.${paceNote}`;
+  }
+
   if (includes(q, 'tip', 'advice', 'save', 'saving', 'cut back', 'reduce', 'improve', 'what should i do', 'help me')) {
     return tipFor(ctx);
   }
@@ -307,5 +390,5 @@ export function answerSimuQuestion(question: string, ctx: SimuContext): string {
     )} — ${formatMoney(ctx.todayTotal)} of it today.${goalLine}`;
   }
 
-  return `I can answer questions about your spending — try "How much have I spent this month?", "What is my biggest category?", or "How much can I safely spend today?"`;
+  return quickSnapshot(ctx);
 }

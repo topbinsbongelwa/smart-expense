@@ -1,23 +1,23 @@
-const currencyFormatter = new Intl.NumberFormat('en-ZA', {
+const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
-  currency: 'ZAR',
+  currency: 'USD',
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
-const wholeFormatter = new Intl.NumberFormat('en-ZA', {
+const wholeFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 });
 
-/** Turns cents into a full currency string, e.g. `R 1 234.50`. */
+/** Turns cents into a full currency string, e.g. `$1,234.50`. */
 export function formatMoney(cents: number): string {
   return currencyFormatter.format(cents / 100);
 }
 
-/** Drops the decimals for headline numbers, e.g. `R 12 340`. */
+/** Drops the decimals for headline numbers, e.g. `$12,340`. */
 export function formatMoneyWhole(cents: number): string {
   const amount = Math.round(Math.abs(cents) / 100);
-  return `R ${wholeFormatter.format(amount)}`;
+  return `$${wholeFormatter.format(amount)}`;
 }
 
 export function formatNumber(value: number): string {
