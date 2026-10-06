@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/app-button';
+import { BrandMark } from '@/components/brand';
 import { Card } from '@/components/card';
 import { ExpenseRow } from '@/components/expense-row';
 import { MaxContentWidth, Radius } from '@/constants/theme';
@@ -95,9 +96,12 @@ export default function CalendarScreen() {
           styles.content,
           { paddingBottom: tabBarHeight + 40, paddingTop: insets.top + 12 },
         ]}>
-        <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: theme.textMuted }]}>Time-based logging</Text>
-          <Text style={[styles.title, { color: theme.text }]}>Calendar</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.header}>
+            <Text style={[styles.eyebrow, { color: theme.textMuted }]}>Time-based logging</Text>
+            <Text style={[styles.title, { color: theme.text }]}>Calendar</Text>
+          </View>
+          <BrandMark size={54} />
         </View>
 
         <Card style={styles.calendarCard}>
@@ -259,7 +263,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     gap: 16,
   },
-  header: { gap: 2 },
+  header: { gap: 2, flexShrink: 1 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
   title: { fontSize: 30, fontWeight: '800', letterSpacing: -0.8 },
   calendarCard: { gap: 14 },

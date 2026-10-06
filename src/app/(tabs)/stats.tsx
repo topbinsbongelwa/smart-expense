@@ -7,6 +7,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/app-button';
+import { BrandMark } from '@/components/brand';
 import { Card } from '@/components/card';
 import { getCategory } from '@/constants/categories';
 import { Brand, MaxContentWidth, Radius } from '@/constants/theme';
@@ -73,13 +74,16 @@ export default function StatsScreen() {
           styles.content,
           { paddingBottom: tabBarHeight + 40, paddingTop: insets.top + 12 },
         ]}>
-        <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: theme.textMuted }]}>Statistics</Text>
-          <Text style={[styles.title, { color: theme.text }]}>Where you stand</Text>
-          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            {formatMonth(new Date())} · {summary.monthCount} tracked{' '}
-            {summary.monthCount === 1 ? 'entry' : 'entries'}
-          </Text>
+        <View style={styles.headerRow}>
+          <View style={styles.header}>
+            <Text style={[styles.eyebrow, { color: theme.textMuted }]}>Statistics</Text>
+            <Text style={[styles.title, { color: theme.text }]}>Where you stand</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              {formatMonth(new Date())} · {summary.monthCount} tracked{' '}
+              {summary.monthCount === 1 ? 'entry' : 'entries'}
+            </Text>
+          </View>
+          <BrandMark size={54} />
         </View>
 
         <View style={styles.tileGrid}>
@@ -241,7 +245,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     gap: 16,
   },
-  header: { gap: 2 },
+  header: { gap: 2, flexShrink: 1 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   eyebrow: {
     fontSize: 11,
     fontWeight: '800',

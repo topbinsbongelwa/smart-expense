@@ -1,7 +1,16 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useBottomTabBarHeight } from 'expo-router/js-tabs';
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useRef, useState, useEffect } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/app-button';
@@ -18,13 +27,17 @@ import { useExpenses, useExpenseSummary } from '@/hooks/use-expenses';
 import { useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
 import { buildInsights, buildWeeklySummary, type InsightTone } from '@/lib/insights';
-import { tapFeedback } from '@/lib/haptics';
+import { successFeedback, tapFeedback } from '@/lib/haptics';
 import { formatMoney } from '@/lib/money';
+import { answerSimuQuestion, SIMU_INTRO, SIMU_SUGGESTIONS, type SimuMessage } from '@/lib/simu';
+
+function makeId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export default function InsightsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
   const { expenses, hydrated } = useExpenses();
   const { profile } = useProfile();
   const summary = useExpenseSummary(expenses);
@@ -33,6 +46,25 @@ export default function InsightsScreen() {
   const weekdays = useWeekdayTotals(expenses);
   const largest = useLargestExpense(expenses);
   const [showSummary, setShowSummary] = useState(false);
+
+  const [messages, setMessages] = useState<SimuMessage[]>([]);
+  const [draft, setDraft] = useState('');
+  const [thinking, setThinking] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (messages.length === 0 && !thinking) return;
+    const frame = requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [messages.length, thinking]);
 
   const busiest = useMemo(
     () => weekdays.reduce((best, day) => (day.total > best.total ? day : best), weekdays[0]),
@@ -56,6 +88,46 @@ export default function InsightsScreen() {
     [expenses, summary, trend, breakdown, largest, busiest]
   );
 
+  const simuContext = useMemo(
+    () => ({
+      expenses,
+      monthTotal: summary.monthTotal,
+      monthCount: summary.monthCount,
+      todayTotal: summary.todayTotal,
+      averagePerDay: summary.averagePerDay,
+      breakdown: breakdown.map((item) => ({
+        categoryId: item.categoryId,
+        label: item.label,
+        total: item.total,
+      })),
+      weekTotal: trend.thisWeekTotal,
+      weekChange: trend.change,
+      largest,
+      goal: profile.monthlyGoal,
+      daysElapsed: summary.daysElapsed,
+      daysInMonth: summary.daysInMonth,
+      weekdays,
+    }),
+    [expenses, summary, breakdown, trend, largest, profile.monthlyGoal, weekdays]
+  );
+
+  function send(raw?: string) {
+    const text = (raw ?? draft).trim();
+    if (text.length === 0 || thinking) return;
+    tapFeedback();
+    setDraft('');
+    setMessages((current) => [...current, { id: makeId(), role: 'user', text }]);
+    setThinking(true);
+
+    timerRef.current = setTimeout(() => {
+      const answer = answerSimuQuestion(text, simuContext);
+      setMessages((current) => [...current, { id: makeId(), role: 'simu', text: answer }]);
+      setThinking(false);
+      timerRef.current = null;
+      successFeedback();
+    }, 650);
+  }
+
   const toneColors: Record<InsightTone, { background: string; accent: string }> = {
     positive: { background: theme.primarySoft, accent: theme.primary },
     warning: { background: theme.dangerSoft, accent: theme.danger },
@@ -63,113 +135,234 @@ export default function InsightsScreen() {
   };
 
   const progress = profile.monthlyGoal > 0 ? Math.min(1, summary.monthTotal / profile.monthlyGoal) : 0;
+  const canSend = draft.trim().length > 0 && !thinking;
+
+  const avatar = (
+    <View style={[styles.avatar, { backgroundColor: theme.primarySoft }]}>
+      <Ionicons name="sparkles" size={13} color={theme.primary} />
+    </View>
+  );
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.screen, { backgroundColor: theme.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
+        ref={scrollRef}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: tabBarHeight + 40, paddingTop: insets.top + 12 },
+          { paddingBottom: 28, paddingTop: insets.top + 12 },
         ]}>
         <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: theme.textMuted }]}>Iskhwama AI</Text>
+          <Text style={[styles.eyebrow, { color: theme.textMuted }]}>Simu AI</Text>
           <Text style={[styles.title, { color: theme.text }]}>Your money coach</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Patterns and tips generated on-device from your own entries. Nothing leaves your phone.
+            Ask Simu anything about your spending — every answer is generated on-device from your own
+            entries. Nothing leaves your phone.
           </Text>
         </View>
 
-        <View style={styles.goalCard}>
-          <View style={styles.goalGlow} />
-          <View style={styles.goalTop}>
-            <View>
-              <Text style={styles.goalLabel}>Monthly target</Text>
-              <Text style={styles.goalValue}>{formatMoney(profile.monthlyGoal)}</Text>
+        {messages.length === 0 ? (
+          <>
+            <View style={styles.messageRow}>
+              {avatar}
+              <View style={[styles.bubble, styles.bubbleSimu, { backgroundColor: theme.backgroundElement }]}>
+                <Text style={[styles.bubbleText, { color: theme.text }]}>{SIMU_INTRO(profile.name)}</Text>
+              </View>
             </View>
-            <View style={styles.goalChip}>
-              <Ionicons
-                name={progress >= 1 ? 'alert' : 'flag'}
-                size={13}
-                color="rgba(255,255,255,0.95)"
-              />
-              <Text style={styles.goalChipLabel}>{Math.round(progress * 100)}% used</Text>
+
+            <View style={styles.chipWrap}>
+              {SIMU_SUGGESTIONS.map((suggestion) => (
+                <Pressable
+                  key={suggestion}
+                  accessibilityRole="button"
+                  onPress={() => send(suggestion)}
+                  style={({ pressed }) => [
+                    styles.chip,
+                    {
+                      backgroundColor: theme.backgroundElement,
+                      borderColor: theme.border,
+                      opacity: pressed ? 0.65 : 1,
+                    },
+                  ]}>
+                  <Text style={[styles.chipText, { color: theme.textSecondary }]}>{suggestion}</Text>
+                </Pressable>
+              ))}
             </View>
-          </View>
 
-          <View style={styles.goalTrack}>
-            <View style={[styles.goalFill, { width: `${Math.max(3, progress * 100)}%` }]} />
-          </View>
-
-          <Text style={styles.goalMeta}>
-            {summary.monthTotal >= profile.monthlyGoal
-              ? `You are ${formatMoney(summary.monthTotal - profile.monthlyGoal)} over your target with ${summary.daysInMonth - summary.daysElapsed} days to go.`
-              : `${formatMoney(Math.max(0, profile.monthlyGoal - summary.monthTotal))} left before you hit your target.`}
-          </Text>
-        </View>
-
-        {insights.map((insight) => {
-          const colors = toneColors[insight.tone];
-          return (
-            <Card key={insight.id} style={styles.insightCard}>
-              <View style={styles.insightRow}>
-                <View style={[styles.insightIcon, { backgroundColor: colors.background }]}>
-                  <Ionicons name={insight.icon} size={19} color={colors.accent} />
+            <View style={styles.goalCard}>
+              <View style={styles.goalGlow} />
+              <View style={styles.goalTop}>
+                <View>
+                  <Text style={styles.goalLabel}>Monthly target</Text>
+                  <Text style={styles.goalValue}>{formatMoney(profile.monthlyGoal)}</Text>
                 </View>
-                <View style={styles.insightBody}>
-                  <Text style={[styles.insightTitle, { color: theme.text }]}>{insight.title}</Text>
-                  <Text style={[styles.insightText, { color: theme.textSecondary }]}>{insight.body}</Text>
+                <View style={styles.goalChip}>
+                  <Ionicons
+                    name={progress >= 1 ? 'alert' : 'flag'}
+                    size={13}
+                    color="rgba(255,255,255,0.95)"
+                  />
+                  <Text style={styles.goalChipLabel}>{Math.round(progress * 100)}% used</Text>
                 </View>
               </View>
+
+              <View style={styles.goalTrack}>
+                <View style={[styles.goalFill, { width: `${Math.max(3, progress * 100)}%` }]} />
+              </View>
+
+              <Text style={styles.goalMeta}>
+                {summary.monthTotal >= profile.monthlyGoal
+                  ? `You are ${formatMoney(summary.monthTotal - profile.monthlyGoal)} over your target with ${summary.daysInMonth - summary.daysElapsed} days to go.`
+                  : `${formatMoney(Math.max(0, profile.monthlyGoal - summary.monthTotal))} left before you hit your target.`}
+              </Text>
+            </View>
+
+            {insights.map((insight) => {
+              const colors = toneColors[insight.tone];
+              return (
+                <Card key={insight.id} style={styles.insightCard}>
+                  <View style={styles.insightRow}>
+                    <View style={[styles.insightIcon, { backgroundColor: colors.background }]}>
+                      <Ionicons name={insight.icon} size={19} color={colors.accent} />
+                    </View>
+                    <View style={styles.insightBody}>
+                      <Text style={[styles.insightTitle, { color: theme.text }]}>{insight.title}</Text>
+                      <Text style={[styles.insightText, { color: theme.textSecondary }]}>
+                        {insight.body}
+                      </Text>
+                    </View>
+                  </View>
+                </Card>
+              );
+            })}
+
+            <Card style={styles.summaryCard}>
+              <View style={styles.summaryHeader}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>Weekly briefing</Text>
+                <Ionicons name="reader" size={18} color={theme.textMuted} />
+              </View>
+
+              {showSummary ? (
+                <Text style={[styles.summaryText, { color: theme.textSecondary }]}>
+                  {buildWeeklySummary({
+                    expenses,
+                    monthTotal: summary.monthTotal,
+                    weeklyTotal: trend.thisWeekTotal,
+                    topCategory: breakdown[0] ? { label: breakdown[0].label } : null,
+                  })}
+                </Text>
+              ) : (
+                <Text style={[styles.summaryText, { color: theme.textMuted }]}>
+                  Tap below and Simu will read your week back to you in plain language.
+                </Text>
+              )}
+
+              <AppButton
+                label={showSummary ? 'Refresh briefing' : 'Generate my briefing'}
+                icon="sparkles"
+                variant={showSummary ? 'secondary' : 'primary'}
+                disabled={!hydrated}
+                onPress={() => {
+                  tapFeedback();
+                  setShowSummary(true);
+                }}
+              />
             </Card>
-          );
-        })}
 
-        <Card style={styles.summaryCard}>
-          <View style={styles.summaryHeader}>
-            <Text style={[styles.cardTitle, { color: theme.text }]}>Weekly briefing</Text>
-            <Ionicons name="reader" size={18} color={theme.textMuted} />
-          </View>
+            {summary.topCategoryId ? (
+              <Card style={styles.footerCard}>
+                <Text style={[styles.footerTitle, { color: theme.text }]}>Coach&apos;s note</Text>
+                <Text style={[styles.footerText, { color: theme.textSecondary }]}>
+                  Right now {getCategory(summary.topCategoryId).label.toLowerCase()} is your biggest
+                  bucket. Ask Simu a question above and it will compare your pace against your target.
+                </Text>
+              </Card>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {messages.map((message) =>
+              message.role === 'user' ? (
+                <View key={message.id} style={[styles.messageRow, styles.messageRowUser]}>
+                  <View style={[styles.bubble, styles.bubbleUser, { backgroundColor: theme.primary }]}>
+                    <Text style={[styles.bubbleText, { color: theme.onBrand }]}>{message.text}</Text>
+                  </View>
+                </View>
+              ) : (
+                <View key={message.id} style={styles.messageRow}>
+                  {avatar}
+                  <View
+                    style={[styles.bubble, styles.bubbleSimu, { backgroundColor: theme.backgroundElement }]}>
+                    <Text style={[styles.bubbleText, { color: theme.text }]}>{message.text}</Text>
+                  </View>
+                </View>
+              )
+            )}
 
-          {showSummary ? (
-            <Text style={[styles.summaryText, { color: theme.textSecondary }]}>
-              {buildWeeklySummary({
-                expenses,
-                monthTotal: summary.monthTotal,
-                weeklyTotal: trend.thisWeekTotal,
-                topCategory: breakdown[0] ? { label: breakdown[0].label } : null,
-              })}
-            </Text>
-          ) : (
-            <Text style={[styles.summaryText, { color: theme.textMuted }]}>
-              Tap below and Iskhwama will read your week back to you in plain language.
-            </Text>
-          )}
+            {thinking ? (
+              <View style={styles.messageRow}>
+                {avatar}
+                <View
+                  style={[
+                    styles.bubble,
+                    styles.bubbleSimu,
+                    styles.thinkingBubble,
+                    { backgroundColor: theme.backgroundElement },
+                  ]}>
+                  <ActivityIndicator size="small" color={theme.primary} />
+                  <Text style={[styles.thinkingText, { color: theme.textMuted }]}>Simu is thinking…</Text>
+                </View>
+              </View>
+            ) : null}
 
-          <AppButton
-            label={showSummary ? 'Refresh briefing' : 'Generate my briefing'}
-            icon="sparkles"
-            variant={showSummary ? 'secondary' : 'primary'}
-            disabled={!hydrated}
-            onPress={() => {
-              tapFeedback();
-              setShowSummary(true);
-            }}
-          />
-        </Card>
-
-        {summary.topCategoryId ? (
-          <Card style={styles.footerCard}>
-            <Text style={[styles.footerTitle, { color: theme.text }]}>Coach&apos;s note</Text>
-            <Text style={[styles.footerText, { color: theme.textSecondary }]}>
-              Right now {getCategory(summary.topCategoryId).label.toLowerCase()} is your biggest
-              bucket. Tag a few more entries and Iskhwama will compare your pace against your target
-              every time you open the app.
-            </Text>
-          </Card>
-        ) : null}
+            <AppButton
+              label="Clear chat"
+              icon="refresh"
+              variant="ghost"
+              style={styles.clearButton}
+              onPress={() => {
+                tapFeedback();
+                setMessages([]);
+              }}
+            />
+          </>
+        )}
       </ScrollView>
-    </View>
+
+      <View
+        style={[styles.composer, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          placeholder="Ask Simu about your money…"
+          placeholderTextColor={theme.textMuted}
+          returnKeyType="send"
+          onSubmitEditing={() => send()}
+          blurOnSubmit={false}
+          style={[
+            styles.composerInput,
+            { backgroundColor: theme.backgroundElement, color: theme.text },
+          ]}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Send question"
+          disabled={!canSend}
+          onPress={() => send()}
+          style={({ pressed }) => [
+            styles.sendButton,
+            {
+              backgroundColor: theme.primary,
+              opacity: !canSend ? 0.4 : pressed ? 0.85 : 1,
+            },
+          ]}>
+          <Ionicons name="arrow-up" size={20} color={theme.onBrand} />
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -186,6 +379,60 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
   title: { fontSize: 30, fontWeight: '800', letterSpacing: -0.8 },
   subtitle: { fontSize: 13.5, fontWeight: '500', lineHeight: 19 },
+  messageRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  messageRowUser: { justifyContent: 'flex-end' },
+  avatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bubble: {
+    flexShrink: 1,
+    maxWidth: '86%',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  bubbleSimu: { borderTopLeftRadius: 6 },
+  bubbleUser: { borderTopRightRadius: 6 },
+  bubbleText: { fontSize: 14, fontWeight: '500', lineHeight: 20 },
+  thinkingBubble: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  thinkingText: { fontSize: 13, fontWeight: '600' },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+  },
+  chipText: { fontSize: 12.5, fontWeight: '600' },
+  clearButton: { alignSelf: 'flex-start' },
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  composerInput: {
+    flex: 1,
+    borderRadius: Radius.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   goalCard: {
     borderRadius: Radius.xl,
     padding: 20,
