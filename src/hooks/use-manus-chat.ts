@@ -14,11 +14,24 @@ import type { SimuContext, SimuMessage } from '@/lib/simu';
 
 export type ChatMessage = SimuMessage & { source?: AskSource };
 
+/** Staged status lines shown while Manus works — advances every step. */
+export const THINKING_LABELS = [
+  'Manus is thinking…',
+  'Reading your latest entries…',
+  'Crunching the numbers…',
+  'Comparing against your target…',
+  'Almost there…',
+];
+
+const THINKING_STEP_MS = 900;
+
 export type ManusChat = {
   messages: ChatMessage[];
   draft: string;
   setDraft: (value: string) => void;
   thinking: boolean;
+  /** Current staged status line; only meaningful while `thinking` is true. */
+  thinkingLabel: string;
   canSend: boolean;
   /** Sends the draft (or an explicit suggestion) to Manus AI. */
   send: (raw?: string) => void;
@@ -45,6 +58,7 @@ export function useManusChat(): ManusChat {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
+  const [thinkingStep, setThinkingStep] = useState(0);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -53,6 +67,12 @@ export function useManusChat(): ManusChat {
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!thinking) return;
+    const timer = setInterval(() => setThinkingStep((step) => step + 1), THINKING_STEP_MS);
+    return () => clearInterval(timer);
+  }, [thinking]);
 
   const context = useMemo<SimuContext>(
     () => ({
@@ -93,6 +113,7 @@ export function useManusChat(): ManusChat {
       setDraft('');
       const userMessage: ChatMessage = { id: makeId(), role: 'user', text };
       setMessages((current) => [...current, userMessage]);
+      setThinkingStep(0);
       setThinking(true);
 
       // `messages` here is the prior turns; askManus appends the new question itself.
@@ -109,6 +130,7 @@ export function useManusChat(): ManusChat {
   const clear = useCallback(() => {
     tapFeedback();
     setMessages([]);
+    setThinkingStep(0);
     setThinking(false);
   }, []);
 
@@ -117,6 +139,7 @@ export function useManusChat(): ManusChat {
     draft,
     setDraft,
     thinking,
+    thinkingLabel: THINKING_LABELS[Math.min(thinkingStep, THINKING_LABELS.length - 1)],
     canSend: draft.trim().length > 0 && !thinking,
     send,
     clear,

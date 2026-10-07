@@ -259,7 +259,9 @@ export default function InsightsScreen() {
                     { backgroundColor: theme.backgroundElement },
                   ]}>
                   <ActivityIndicator size="small" color={theme.primary} />
-                  <Text style={[styles.thinkingText, { color: theme.textMuted }]}>Manus is thinking…</Text>
+                  <Text style={[styles.thinkingText, { color: theme.textMuted }]}>
+                    {chat.thinkingLabel}
+                  </Text>
                 </View>
               </View>
             ) : null}

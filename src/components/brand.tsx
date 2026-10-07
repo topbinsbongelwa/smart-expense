@@ -2,31 +2,18 @@ import { Image, type ImageSource } from 'expo-image';
 import { StyleSheet, Text, View, type ViewProps } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-import { APP_LOGO } from '@/constants/logo';
+import { APP_LOGO, BRAND_MARK_PATH, BRAND_MARK_STROKE_WIDTH } from '@/constants/logo';
 import { Brand, Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-/**
- * The Iskhwama mark: a bold trend line that breaks upward into an arrow.
- * Pure vector, so it stays razor-sharp from 24px badges to 56px heroes.
- */
-const GLYPH_LINE = 'M20 70L40 50L52 60L77.9 29.4';
-const GLYPH_HEAD = 'M76.4 46.3L77.9 29.4L61.5 33.8';
-
 function BrandGlyph({ size }: { size: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+    <Svg width={size} height={size} viewBox="0 0 100 100">
       <Path
-        d={GLYPH_LINE}
+        d={BRAND_MARK_PATH}
+        fill="none"
         stroke={Brand.white}
-        strokeWidth={10}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d={GLYPH_HEAD}
-        stroke={Brand.white}
-        strokeWidth={10}
+        strokeWidth={BRAND_MARK_STROKE_WIDTH}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -126,7 +113,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   wordmark: {
-    fontFamily: Fonts.rounded,
+    fontFamily: Fonts.sans,
     fontSize: 23,
     fontWeight: '800',
     letterSpacing: -0.8,
