@@ -27,7 +27,7 @@ export function BrandMark({
   onBrand = false,
 }: {
   size?: number;
-  logo?: ImageSource | null;
+  logo?: ImageSource | number | null;
   onBrand?: boolean;
 }) {
   const theme = useTheme();
@@ -46,11 +46,23 @@ export function BrandMark({
         onBrand ? null : styles.markShadow,
       ]}>
       {logo ? (
-        <Image
-          source={logo}
-          style={{ width: size * 0.72, height: size * 0.72 }}
-          contentFit="contain"
-        />
+        <View
+          style={[
+            styles.tile,
+            {
+              width: size * 0.8,
+              height: size * 0.8,
+              borderRadius: size * 0.24,
+              backgroundColor: onBrand ? 'rgba(255,255,255,0.18)' : 'transparent',
+            },
+            onBrand ? null : styles.tileGradient,
+          ]}>
+          <Image
+            source={logo}
+            style={{ width: size * 0.72, height: size * 0.72 }}
+            contentFit="contain"
+          />
+        </View>
       ) : (
         <View
           style={[
