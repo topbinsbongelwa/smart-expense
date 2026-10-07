@@ -45,7 +45,7 @@ export default function WelcomeScreen() {
       <View style={styles.hero}>
         <View style={styles.heroGlow} />
         <View style={styles.heroTop}>
-          <BrandMark size={56} onBrand />
+          <BrandMark size={56} />
           <View>
             <Text style={styles.heroWordmark}>Iskhwama</Text>
             <Text style={styles.heroTagline}>Smart money, every day</Text>
