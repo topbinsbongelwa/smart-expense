@@ -91,6 +91,10 @@ it; unrelated questions do not include expense records. Voice recordings are sen
 Gemini for transcription and removed from the device cache afterward. Google Search
 grounding is enabled for current or verifiable questions.
 
+Gemini requests use Google's Interactions API with the `gemini-3.8-flash`
+model by default. You can override the model using `EXPO_PUBLIC_GEMINI_MODEL`
+and `EXPO_PUBLIC_GEMINI_AUDIO_MODEL` in `.env`.
+
 `EXPO_PUBLIC_*` values are bundled into client apps, so a Gemini key must be
 restricted to the Gemini API. For a production app, proxy Gemini requests through
 a trusted backend rather than embedding an unrestricted key in the app.
