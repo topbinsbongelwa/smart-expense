@@ -1,4 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import {
+  AudioModule,
+  RecordingPresets,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from 'expo-audio';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
@@ -27,6 +35,7 @@ import {
 import { useExpenses, useExpenseSummary } from '@/hooks/use-expenses';
 import { useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
+import { isGeminiConfigured, transcribeWithGemini } from '@/lib/gemini';
 import { buildInsights, buildWeeklySummary, type InsightTone } from '@/lib/insights';
 import { tapFeedback } from '@/lib/haptics';
 import { formatMoney } from '@/lib/money';
@@ -43,9 +52,118 @@ export default function InsightsScreen() {
   const weekdays = useWeekdayTotals(expenses);
   const largest = useLargestExpense(expenses);
   const [showSummary, setShowSummary] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const chat = useManusChat();
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(audioRecorder);
+  const voiceTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(
+    () => () => {
+      if (voiceTimeout.current) clearTimeout(voiceTimeout.current);
+    },
+    []
+  );
+
+  async function readRecording(uri: string) {
+    if (Platform.OS !== 'web') {
+      return {
+        audioBase64: await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        }),
+        mimeType: 'audio/mp4',
+      };
+    }
+
+    const blob = await (await fetch(uri)).blob();
+    const audioBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error ?? new Error('Unable to read the voice recording.'));
+      reader.onloadend = () => {
+        if (typeof reader.result !== 'string') {
+          reject(new Error('Unable to read the voice recording.'));
+          return;
+        }
+        resolve(reader.result.slice(reader.result.indexOf(',') + 1));
+      };
+      reader.readAsDataURL(blob);
+    });
+    return { audioBase64, mimeType: blob.type || 'audio/webm' };
+  }
+
+  async function finishRecording() {
+    if (voiceTimeout.current) {
+      clearTimeout(voiceTimeout.current);
+      voiceTimeout.current = null;
+    }
+    setVoiceBusy(true);
+    setVoiceError(null);
+    let recordingUri: string | null = null;
+
+    try {
+      await audioRecorder.stop();
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      recordingUri = audioRecorder.uri;
+      if (!recordingUri) throw new Error('The recording was not saved. Please try again.');
+      const audio = await readRecording(recordingUri);
+      const transcript = await transcribeWithGemini(audio);
+      chat.setDraft(`${chat.draft}${chat.draft.trim() ? ' ' : ''}${transcript}`);
+    } catch (error) {
+      console.error('Voice recording could not be transcribed.', error);
+      setVoiceError(
+        error instanceof Error ? error.message : 'Voice input failed. Please try again.'
+      );
+    } finally {
+      if (recordingUri) {
+        try {
+          if (Platform.OS === 'web') URL.revokeObjectURL(recordingUri);
+          else await FileSystem.deleteAsync(recordingUri, { idempotent: true });
+        } catch (cleanupError) {
+          console.error('Unable to remove the temporary voice recording.', cleanupError);
+        }
+      }
+      setVoiceBusy(false);
+    }
+  }
+
+  async function handleVoiceInput() {
+    if (voiceBusy) return;
+    setVoiceError(null);
+
+    if (recorderState.isRecording) {
+      await finishRecording();
+      return;
+    }
+
+    if (!isGeminiConfigured) {
+      setVoiceError('Voice input needs a Gemini API key. Add it to .env and restart the app.');
+      return;
+    }
+
+    setVoiceBusy(true);
+    try {
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        throw new Error('Microphone access was denied. Allow microphone access to use voice input.');
+      }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      voiceTimeout.current = setTimeout(() => {
+        void finishRecording();
+      }, 60_000);
+    } catch (error) {
+      console.error('Unable to start voice recording.', error);
+      setVoiceError(
+        error instanceof Error ? error.message : 'Unable to start recording. Please try again.'
+      );
+    } finally {
+      setVoiceBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (chat.messages.length === 0 && !chat.thinking) return;
@@ -102,11 +220,11 @@ export default function InsightsScreen() {
           { paddingBottom: 28, paddingTop: insets.top + 12 },
         ]}>
         <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: theme.textMuted }]}>Manus AI</Text>
+          <Text style={[styles.eyebrow, { color: theme.textMuted }]}>AI ASSISTANT</Text>
           <Text style={[styles.title, { color: theme.text }]}>Your money coach</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Ask Manus anything about your spending — answers use your own entries, from the cloud
-            when connected and on-device when offline.
+            Ask about your spending or any other topic. Gemini can search the web for current
+            answers, and uses your entries when you ask about your money.
           </Text>
         </View>
 
@@ -202,7 +320,7 @@ export default function InsightsScreen() {
                 </Text>
               ) : (
                 <Text style={[styles.summaryText, { color: theme.textMuted }]}>
-                  Tap below and Manus will read your week back to you in plain language.
+                  Tap below for a plain-language summary of your week.
                 </Text>
               )}
 
@@ -223,7 +341,7 @@ export default function InsightsScreen() {
                 <Text style={[styles.footerTitle, { color: theme.text }]}>Coach&apos;s note</Text>
                 <Text style={[styles.footerText, { color: theme.textSecondary }]}>
                   Right now {getCategory(summary.topCategoryId).label.toLowerCase()} is your biggest
-                  bucket. Ask Manus a question above and it will compare your pace against your target.
+                  bucket. Ask the AI assistant above to compare your pace against your target.
                 </Text>
               </Card>
             ) : null}
@@ -282,7 +400,7 @@ export default function InsightsScreen() {
         <TextInput
           value={chat.draft}
           onChangeText={chat.setDraft}
-          placeholder="Ask Manus about your money…"
+          placeholder="Ask anything…"
           placeholderTextColor={theme.textMuted}
           returnKeyType="send"
           onSubmitEditing={() => chat.send()}
@@ -292,6 +410,33 @@ export default function InsightsScreen() {
             { backgroundColor: theme.backgroundElement, color: theme.text },
           ]}
         />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            recorderState.isRecording
+              ? 'Stop voice recording, maximum 60 seconds'
+              : 'Record a voice question'
+          }
+          accessibilityState={{ disabled: voiceBusy }}
+          disabled={voiceBusy}
+          onPress={() => void handleVoiceInput()}
+          style={({ pressed }) => [
+            styles.voiceButton,
+            {
+              backgroundColor: recorderState.isRecording ? theme.dangerSoft : theme.backgroundElement,
+              opacity: voiceBusy ? 0.55 : pressed ? 0.75 : 1,
+            },
+          ]}>
+          {voiceBusy ? (
+            <ActivityIndicator size="small" color={theme.primary} />
+          ) : (
+            <Ionicons
+              name={recorderState.isRecording ? 'stop' : 'mic'}
+              size={20}
+              color={recorderState.isRecording ? theme.danger : theme.textSecondary}
+            />
+          )}
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Send question"
@@ -307,6 +452,23 @@ export default function InsightsScreen() {
           <Ionicons name="arrow-up" size={20} color={theme.onBrand} />
         </Pressable>
       </View>
+      {voiceError || chat.error || voiceBusy || recorderState.isRecording ? (
+        <Text
+          accessibilityRole={voiceError || chat.error ? 'alert' : undefined}
+          style={[
+            styles.errorText,
+            {
+              color: voiceError || chat.error ? theme.danger : theme.textMuted,
+              backgroundColor: theme.background,
+            },
+          ]}>
+          {voiceError ??
+            chat.error ??
+            (voiceBusy
+              ? 'Transcribing your recording…'
+              : 'Recording — tap the mic to stop (60 seconds max).')}
+        </Text>
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -377,6 +539,19 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  voiceButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorText: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    fontSize: 12,
+    fontWeight: '600',
   },
   goalCard: {
     borderRadius: Radius.xl,

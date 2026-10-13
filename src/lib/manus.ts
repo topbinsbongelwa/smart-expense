@@ -1,5 +1,5 @@
 /**
- * Manus AI — the app's money assistant.
+ * AI assistant — the app's spending and general-question assistant.
  *
  * Sends the question plus a compact snapshot of the user's own spending to a
  * Manus-style chat-completions endpoint, so answers can go beyond the local
@@ -8,11 +8,12 @@
  */
 
 import { isManusConfigured, manusConfig } from '@/lib/manus-config';
+import { askGemini, isGeminiConfigured } from '@/lib/gemini';
 import { formatMoney } from '@/lib/money';
 import { answerSimuQuestion, type SimuContext, type SimuMessage } from '@/lib/simu';
 import { safeToSpendToday } from '@/lib/smart';
 
-export type AskSource = 'manus' | 'local';
+export type AskSource = 'gemini' | 'manus' | 'local';
 
 export type AskResult = {
   text: string;
@@ -20,7 +21,7 @@ export type AskResult = {
 };
 
 export const MANUS_INTRO = (name: string) =>
-  `Hi ${name}! I am Manus AI, your money assistant. Ask me anything about your spending — totals, categories, goals or tips. I answer from your own entries.`;
+  `Hi ${name}! I am your AI assistant. Ask me about your spending or anything else — I can use your entries for money questions and Google Gemini for broader answers.`;
 
 export const MANUS_SUGGESTIONS = [
   'How much have I spent this month?',
@@ -170,40 +171,41 @@ function buildDataSection(ctx: SimuContext): string {
  * The system prompt: persona, hard reasoning rules, then the live data
  * snapshot. Kept in one place so cloud answers and the UI never disagree.
  */
-function buildSystemPrompt(ctx: SimuContext): string {
-  return [
+function isExpenseQuestion(question: string): boolean {
+  return /\b(expense|expenses|spend|spent|spending|budget|money|save|saving|transaction|transactions|purchase|purchases|income|goal|afford|bill|bills|rent|cash|financial|finance|category|categories|safe to spend)\b/i.test(
+    question
+  );
+}
+
+function buildSystemPrompt(ctx: SimuContext, includeExpenseData: boolean): string {
+  const instructions = [
     '# Role',
-    'You are Manus AI, the elite personal-finance assistant inside Iskhwama, an expense-tracking app.',
-    'You are part analyst, part coach: razor-sharp with numbers, warm and practical with people.',
+    'You are the helpful AI assistant inside Iskhwama, an expense-tracking app.',
+    'Answer general questions across topics as well as personal finance questions. Be warm, practical, and accurate.',
     '',
     '# Non-negotiable rules',
-    '1. Every factual claim about this user spending must come from the data below. Never invent transactions, totals or trends.',
-    '2. Quote real numbers with units: amounts, percentages, day counts. Prefer "$X (Y%)" phrasing.',
-    '3. Ground general financial advice in their situation first; add outside wisdom only when it helps.',
-    '4. If the data cannot answer the question, say exactly what is missing and how logging more will unlock it.',
-    '5. Use the conversation history: refer back to earlier turns, never repeat yourself, resolve pronouns ("how about last week?").',
+    '1. Claims about this user’s spending must come only from live expense data included below. Never invent transactions, totals or trends.',
+    '2. For questions unrelated to this user’s finances, answer normally and use Google Search when current or verifiable facts are needed.',
+    '3. If the live expense data cannot answer a money question, say what is missing instead of guessing.',
+    '4. Use conversation history: refer back to earlier turns, resolve pronouns, and avoid repeating yourself.',
     '',
-    '# How to think before answering',
+    '# Reasoning',
     '- Compare: this month vs last month, this week vs last week, pace vs target, category vs category.',
     '- Forecast: project month-end, flag overspend early, compute what is safe to spend.',
     '- Detect: unusual spikes, dominant categories, weekday patterns, creeping averages.',
-    '- Judge: is the number good news, bad news or neutral *for their goal*? Say which.',
-    '- Then answer the actual question first; analysis supports the answer, it does not bury it.',
+    '- Think through the question carefully, then share only the useful conclusion and a brief explanation.',
     '',
     '# Output style',
-    '- Lead with the direct answer in one sentence, key figure in *bold*.',
-    '- Follow with 2-4 bullets (•) of supporting detail only when useful.',
-    '- Give one concrete next step when spending is off track or the goal is at risk.',
-    '- Optionally end with a single short follow-up question that moves things forward.',
-    '- Keep the whole reply under ~150 words unless the user explicitly asks for depth.',
-    '- Plain text with • bullets and *bold*. No markdown tables, no headers, no emoji.',
-    '- Friendly, direct, encouraging. Never preachy, never vague, never robotic.',
+    '- Answer the actual question first. Keep replies concise unless the user asks for detail.',
+    '- Use a short list or citations when they make the answer clearer.',
+    '- Do not reveal private chain-of-thought.',
     '',
     '# Currency',
-    'All amounts are US dollars (USD). Format them like $1,234 — drop cents unless they matter.',
+    'Use the currency formatting shown in the live expense data; do not assume another currency.',
     '',
-    buildDataSection(ctx),
-  ].join('\n');
+  ];
+  if (includeExpenseData) instructions.push(buildDataSection(ctx));
+  return instructions.join('\n');
 }
 
 function toApiHistory(history: SimuMessage[]) {
@@ -258,7 +260,31 @@ async function performAsk(input: {
   history?: SimuMessage[];
 }): Promise<AskResult> {
   const { question, context, history = [] } = input;
-  const fallback = (): AskResult => ({ text: answerSimuQuestion(question, context), source: 'local' });
+  const previousQuestion = [...history].reverse().find((message) => message.role === 'user');
+  const includeExpenseData =
+    isExpenseQuestion(question) ||
+    (previousQuestion !== undefined && isExpenseQuestion(previousQuestion.text));
+  const isSmallTalk =
+    /^(hi|hello|hey|yo|hiya|how are you|good (morning|afternoon|evening))\b/i.test(question) ||
+    /\b(what can you do|what do you do|who are you|your name|how does this work|features)\b/i.test(
+      question
+    );
+  const fallback = (): AskResult => ({
+    text:
+      !isExpenseQuestion(question) && !isSmallTalk
+        ? 'I need Gemini connected to answer questions beyond your expense data. Add EXPO_PUBLIC_GEMINI_API_KEY to .env and restart the app.'
+        : answerSimuQuestion(question, context),
+    source: 'local',
+  });
+
+  if (isGeminiConfigured) {
+    const text = await askGemini({
+      question,
+      systemPrompt: buildSystemPrompt(context, includeExpenseData),
+      history,
+    });
+    return { text, source: 'gemini' };
+  }
 
   if (!isManusConfigured || !manusConfig.apiUrl || !manusConfig.apiKey) return fallback();
 
@@ -276,7 +302,7 @@ async function performAsk(input: {
         model: manusConfig.model,
         temperature: 0.4,
         messages: [
-          { role: 'system', content: buildSystemPrompt(context) },
+          { role: 'system', content: buildSystemPrompt(context, includeExpenseData) },
           ...toApiHistory(history),
           { role: 'user', content: question },
         ],
@@ -288,7 +314,8 @@ async function performAsk(input: {
     const reply = readReply((await response.json()) as ManusResponse);
     if (!reply) throw new Error('Manus returned an empty reply');
     return { text: reply, source: 'manus' };
-  } catch {
+  } catch (error) {
+    console.error('Manus AI request failed; using the offline assistant.', error);
     return fallback();
   } finally {
     clearTimeout(timer);

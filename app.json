@@ -27,6 +27,12 @@
           "image": "./assets/images/Screenshot 2026-09-30 112505.png",
           "imageWidth": 76
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Iskhwama to record your voice question for transcription."
+        }
       ]
     ],
     "experiments": {

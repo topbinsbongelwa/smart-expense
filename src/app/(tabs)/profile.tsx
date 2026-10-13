@@ -14,7 +14,7 @@ import { useMonthBreakdown, useMonthlyTotals } from '@/hooks/use-expense-analyti
 import { useAuth } from '@/hooks/use-auth';
 import { useExpenses, useExpenseSummary } from '@/hooks/use-expenses';
 import { initials, useProfile } from '@/hooks/use-profile';
-import { useTheme } from '@/hooks/use-theme';
+import { useTheme, useThemePreference } from '@/hooks/use-theme';
 import { errorFeedback, successFeedback } from '@/lib/haptics';
 import { formatMoney } from '@/lib/money';
 
@@ -22,6 +22,7 @@ const SECRET_KEY = 'iskhwama.secret.v1';
 
 export default function ProfileScreen() {
   const theme = useTheme();
+  const { scheme, toggleTheme } = useThemePreference();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const { expenses, clearExpenses, restoreSampleData, hydrated } = useExpenses();
@@ -264,6 +265,44 @@ export default function ProfileScreen() {
           <Text style={[styles.cardTitle, { color: theme.text }]}>Personalise</Text>
 
           <View style={styles.field}>
+            <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Appearance</Text>
+            <View
+              accessibilityRole="radiogroup"
+              accessibilityLabel="Appearance theme"
+              style={[styles.themePicker, { backgroundColor: theme.backgroundElement }]}>
+              {(['light', 'dark'] as const).map((option) => {
+                const selected = scheme === option;
+                return (
+                  <Pressable
+                    key={option}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    onPress={() => {
+                      if (!selected) toggleTheme();
+                    }}
+                    style={[
+                      styles.themeOption,
+                      selected && { backgroundColor: theme.primary },
+                    ]}>
+                    <Ionicons
+                      name={option === 'light' ? 'sunny' : 'moon'}
+                      size={16}
+                      color={selected ? theme.onBrand : theme.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.themeOptionLabel,
+                        { color: selected ? theme.onBrand : theme.textSecondary },
+                      ]}>
+                      {option === 'light' ? 'Light' : 'Dark charcoal'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.field}>
             <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Display name</Text>
             <TextInput
               value={draftName}
@@ -333,8 +372,8 @@ export default function ProfileScreen() {
         <Card style={styles.formCard}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Data</Text>
           <Text style={[styles.cardHint, { color: theme.textSecondary }]}>
-            Your expenses stay on this device. Signing in only uses your email and name — nothing is
-            uploaded and nothing is sold.
+            Your expenses are stored on this device. If you ask the AI about your money, relevant
+            expense details are sent to the configured AI provider to answer your question.
           </Text>
 
           <View style={styles.dataActions}>
@@ -402,6 +441,23 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
   cardHint: { fontSize: 13, fontWeight: '500', lineHeight: 19, marginTop: -6 },
   field: { gap: 6 },
+  themePicker: {
+    flexDirection: 'row',
+    borderRadius: Radius.md,
+    padding: 4,
+    gap: 4,
+  },
+  themeOption: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 8,
+  },
+  themeOptionLabel: { fontSize: 13, fontWeight: '700' },
   fieldLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
   input: {
     borderRadius: Radius.md,

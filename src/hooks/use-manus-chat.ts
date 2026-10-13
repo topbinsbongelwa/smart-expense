@@ -16,11 +16,11 @@ export type ChatMessage = SimuMessage & { source?: AskSource };
 
 /** Staged status lines shown while Manus works — advances every step. */
 export const THINKING_LABELS = [
-  'Manus is thinking…',
-  'Reading your latest entries…',
-  'Crunching the numbers…',
-  'Comparing against your target…',
-  'Almost there…',
+  'Working through your question…',
+  'Checking relevant details…',
+  'Comparing the key points…',
+  'Checking useful sources…',
+  'Finishing the answer…',
 ];
 
 const THINKING_STEP_MS = 900;
@@ -30,10 +30,11 @@ export type ManusChat = {
   draft: string;
   setDraft: (value: string) => void;
   thinking: boolean;
+  error: string | null;
   /** Current staged status line; only meaningful while `thinking` is true. */
   thinkingLabel: string;
   canSend: boolean;
-  /** Sends the draft (or an explicit suggestion) to Manus AI. */
+  /** Sends the draft (or an explicit suggestion) to the AI assistant. */
   send: (raw?: string) => void;
   clear: () => void;
 };
@@ -59,6 +60,7 @@ export function useManusChat(): ManusChat {
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   const [thinkingStep, setThinkingStep] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -111,17 +113,27 @@ export function useManusChat(): ManusChat {
       if (text.length === 0 || thinking) return;
       tapFeedback();
       setDraft('');
+      setError(null);
       const userMessage: ChatMessage = { id: makeId(), role: 'user', text };
       setMessages((current) => [...current, userMessage]);
       setThinkingStep(0);
       setThinking(true);
 
-      // `messages` here is the prior turns; askManus appends the new question itself.
+      // `messages` here is the prior turns; the AI client appends the new question itself.
       void askManus({ question: text, context, history: messages }).then(({ text: reply, source }) => {
         if (!mountedRef.current) return;
         setMessages((current) => [...current, { id: makeId(), role: 'simu', text: reply, source }]);
         setThinking(false);
         successFeedback();
+      }).catch((requestError: unknown) => {
+        if (!mountedRef.current) return;
+        console.error('AI chat request failed.', requestError);
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : 'The AI assistant could not answer right now. Please try again.'
+        );
+        setThinking(false);
       });
     },
     [draft, thinking, messages, context]
@@ -132,6 +144,7 @@ export function useManusChat(): ManusChat {
     setMessages([]);
     setThinkingStep(0);
     setThinking(false);
+    setError(null);
   }, []);
 
   return {
@@ -139,6 +152,7 @@ export function useManusChat(): ManusChat {
     draft,
     setDraft,
     thinking,
+    error,
     thinkingLabel: THINKING_LABELS[Math.min(thinkingStep, THINKING_LABELS.length - 1)],
     canSend: draft.trim().length > 0 && !thinking,
     send,

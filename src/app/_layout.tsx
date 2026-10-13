@@ -13,9 +13,9 @@ import { useEffect } from 'react';
 
 import { Colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ExpensesProvider, useExpenses } from '@/hooks/use-expenses';
 import { ProfileProvider, useProfile } from '@/hooks/use-profile';
+import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -23,7 +23,7 @@ SplashScreen.preventAutoHideAsync();
 const AUTH_ROUTES = ['welcome', 'signup', 'login'];
 
 function IskhwamaNavigator() {
-  const scheme = useColorScheme();
+  const { scheme } = useThemePreference();
   const palette = scheme === 'dark' ? Colors.dark : Colors.light;
   const segments = useSegments();
   const { account, hydrated: authReady } = useAuth();
@@ -85,7 +85,9 @@ export default function RootLayout() {
     <AuthProvider>
       <ExpensesProvider>
         <ProfileProvider>
-          <IskhwamaNavigator />
+          <ThemePreferenceProvider>
+            <IskhwamaNavigator />
+          </ThemePreferenceProvider>
         </ProfileProvider>
       </ExpensesProvider>
     </AuthProvider>

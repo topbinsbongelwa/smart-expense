@@ -76,3 +76,21 @@ directory.
 Firebase configuration values are public client identifiers and are embedded
 in the web app at build time. Without them, the site can build but account
 sign-in and cloud sync will not be configured.
+
+## AI assistant and voice input
+
+To enable open-ended AI answers, current web-backed answers, and voice transcription:
+
+1. Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. Copy `.env.example` to `.env` and set `EXPO_PUBLIC_GEMINI_API_KEY`.
+3. Restart the Expo development server after changing environment variables.
+
+The AI sends the question and recent chat context to Gemini. When a question uses
+expense data, it also sends the expense summary and recent entries needed to answer
+it; unrelated questions do not include expense records. Voice recordings are sent to
+Gemini for transcription and removed from the device cache afterward. Google Search
+grounding is enabled for current or verifiable questions.
+
+`EXPO_PUBLIC_*` values are bundled into client apps, so a Gemini key must be
+restricted to the Gemini API. For a production app, proxy Gemini requests through
+a trusted backend rather than embedding an unrestricted key in the app.

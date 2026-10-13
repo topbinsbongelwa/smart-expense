@@ -191,7 +191,7 @@ export function answerSimuQuestion(question: string, ctx: SimuContext): string {
   if (
     includes(q, 'what can you do', 'what do you do', 'who are you', 'your name', 'how do you work', 'features', 'how does this work')
   ) {
-    return 'I am Manus AI, running in offline mode on your device. Ask me about totals this month or week, category splits, goal progress, pace vs last month, what is safe to spend today, or just say "give me a tip".';
+    return 'I am the AI assistant inside Iskhwama. With Gemini connected, I can answer questions across topics; offline, I can help with locally saved expense totals, categories, goals and spending tips.';
   }
 
   if (/^(hi|hello|hey|yo|hiya|how are you|good (morning|afternoon|evening))\b/.test(q)) {
