@@ -54,3 +54,25 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Deploy to Vercel
+
+This project exports its Expo Router web app as a static site. The Vercel
+configuration runs `npm run build:web` and publishes the generated `dist`
+directory.
+
+1. Import this repository into Vercel and leave the project root set to the
+   repository root. Select **Other** as the framework preset; this Expo web
+   export is configured by `vercel.json`.
+2. In Vercel project settings, add these Firebase web configuration variables
+   for Production and Preview:
+   `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`,
+   `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`,
+   `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, and `EXPO_PUBLIC_FIREBASE_APP_ID`.
+   Copy their values from Firebase Console → Project settings → Your apps.
+3. Add your Vercel domain under Firebase Console → Authentication → Settings →
+   Authorized domains, then redeploy from Vercel.
+
+Firebase configuration values are public client identifiers and are embedded
+in the web app at build time. Without them, the site can build but account
+sign-in and cloud sync will not be configured.
