@@ -4,19 +4,19 @@
     "slug": "iskhwama",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/Screenshot 2026-09-30 112505.png",
+    "icon": "./assets/images/iskhwama-bag-logo.png",
     "scheme": "iskhwama",
     "userInterfaceStyle": "automatic",
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0B5A36",
-        "foregroundImage": "./assets/images/Screenshot 2026-09-30 112505.png"
+        "foregroundImage": "./assets/images/iskhwama-bag-logo.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/Screenshot 2026-09-30 112505.png"
+      "favicon": "./assets/images/iskhwama-bag-logo.png"
     },
     "plugins": [
       "expo-router",
@@ -24,7 +24,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#0B5A36",
-          "image": "./assets/images/Screenshot 2026-09-30 112505.png",
+          "image": "./assets/images/iskhwama-bag-logo.png",
           "imageWidth": 76
         }
       ],

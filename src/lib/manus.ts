@@ -269,24 +269,42 @@ async function performAsk(input: {
     /\b(what can you do|what do you do|who are you|your name|how does this work|features)\b/i.test(
       question
     );
-  const fallback = (): AskResult => ({
-    text:
-      !isExpenseQuestion(question) && !isSmallTalk
-        ? 'I need Gemini connected to answer questions beyond your expense data. Add EXPO_PUBLIC_GEMINI_API_KEY to .env and restart the app.'
-        : answerSimuQuestion(question, context),
-    source: 'local',
-  });
+  const fallback = (cloudUnavailable = false): AskResult => {
+    const canAnswerLocally = includeExpenseData || isSmallTalk;
+    if (canAnswerLocally) {
+      const answer = answerSimuQuestion(question, context);
+      return {
+        text: cloudUnavailable && includeExpenseData
+          ? `${answer}\n\nCloud AI could not respond, so this answer uses your saved expense data.`
+          : answer,
+        source: 'local',
+      };
+    }
+
+    return {
+      text: cloudUnavailable
+        ? 'Cloud AI could not answer just now. I can still help with questions about your saved expenses; please try again shortly for other topics.'
+        : 'I need Gemini connected to answer questions beyond your expense data. Add EXPO_PUBLIC_GEMINI_API_KEY to .env and restart the app.',
+      source: 'local',
+    };
+  };
 
   if (isGeminiConfigured) {
-    const text = await askGemini({
-      question,
-      systemPrompt: buildSystemPrompt(context, includeExpenseData),
-      history,
-    });
-    return { text, source: 'gemini' };
+    try {
+      const text = await askGemini({
+        question,
+        systemPrompt: buildSystemPrompt(context, includeExpenseData),
+        history,
+      });
+      return { text, source: 'gemini' };
+    } catch (error) {
+      console.warn('Gemini AI request failed; trying another configured assistant.', error);
+    }
   }
 
-  if (!isManusConfigured || !manusConfig.apiUrl || !manusConfig.apiKey) return fallback();
+  if (!isManusConfigured || !manusConfig.apiUrl || !manusConfig.apiKey) {
+    return fallback(isGeminiConfigured);
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -316,7 +334,7 @@ async function performAsk(input: {
     return { text: reply, source: 'manus' };
   } catch (error) {
     console.error('Manus AI request failed; using the offline assistant.', error);
-    return fallback();
+    return fallback(true);
   } finally {
     clearTimeout(timer);
   }

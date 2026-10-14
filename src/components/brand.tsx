@@ -8,7 +8,7 @@ import { useTheme } from '@/hooks/use-theme';
 export function BrandMark({ size = 44 }: { size?: number }) {
   return (
     <Image
-      accessibilityLabel="Woolworths shopping bags"
+      accessibilityLabel="Iskhwama shopping bag logo"
       contentFit="contain"
       source={APP_LOGO}
       style={{ width: size, height: size }}

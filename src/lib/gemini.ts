@@ -1,7 +1,7 @@
 import type { SimuMessage } from '@/lib/simu';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-3.8-flash';
 const GEMINI_AUDIO_MODEL = process.env.EXPO_PUBLIC_GEMINI_AUDIO_MODEL || GEMINI_MODEL;
 const REQUEST_TIMEOUT_MS = 45_000;
 

@@ -94,6 +94,9 @@ grounding is enabled for current or verifiable questions.
 Gemini requests use Google's Interactions API with the `gemini-3.8-flash`
 model by default. You can override the model using `EXPO_PUBLIC_GEMINI_MODEL`
 and `EXPO_PUBLIC_GEMINI_AUDIO_MODEL` in `.env`.
+If Gemini cannot respond, the app tries the configured Manus assistant; if no
+cloud provider can respond, money questions fall back to locally saved expense
+data.
 
 `EXPO_PUBLIC_*` values are bundled into client apps, so a Gemini key must be
 restricted to the Gemini API. For a production app, proxy Gemini requests through

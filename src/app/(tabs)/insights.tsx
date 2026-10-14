@@ -7,6 +7,7 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Speech from 'expo-speech';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
@@ -53,6 +54,7 @@ export default function InsightsScreen() {
   const largest = useLargestExpense(expenses);
   const [showSummary, setShowSummary] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceSpeaking, setVoiceSpeaking] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const chat = useManusChat();
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -64,6 +66,9 @@ export default function InsightsScreen() {
   useEffect(
     () => () => {
       if (voiceTimeout.current) clearTimeout(voiceTimeout.current);
+      void Speech.stop().catch((error: unknown) => {
+        console.error('Unable to stop voice transcript playback.', error);
+      });
     },
     []
   );
@@ -111,8 +116,21 @@ export default function InsightsScreen() {
       const audio = await readRecording(recordingUri);
       const transcript = await transcribeWithGemini(audio);
       chat.setDraft(`${chat.draft}${chat.draft.trim() ? ' ' : ''}${transcript}`);
+      await Speech.stop();
+      setVoiceSpeaking(true);
+      Speech.speak(transcript, {
+        rate: 0.95,
+        onDone: () => setVoiceSpeaking(false),
+        onStopped: () => setVoiceSpeaking(false),
+        onError: (error) => {
+          console.error('Voice transcript could not be read aloud.', error);
+          setVoiceSpeaking(false);
+          setVoiceError('Your transcript is ready, but it could not be read aloud.');
+        },
+      });
     } catch (error) {
-      console.error('Voice recording could not be transcribed.', error);
+      setVoiceSpeaking(false);
+      console.error('Voice recording could not be transcribed or read aloud.', error);
       setVoiceError(
         error instanceof Error ? error.message : 'Voice input failed. Please try again.'
       );
@@ -413,18 +431,20 @@ export default function InsightsScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
-            recorderState.isRecording
-              ? 'Stop voice recording, maximum 60 seconds'
+            voiceSpeaking
+              ? 'Reading your voice transcript aloud'
+              : recorderState.isRecording
+                ? 'Stop voice recording, maximum 60 seconds'
               : 'Record a voice question'
           }
-          accessibilityState={{ disabled: voiceBusy }}
-          disabled={voiceBusy}
+          accessibilityState={{ disabled: voiceBusy || voiceSpeaking }}
+          disabled={voiceBusy || voiceSpeaking}
           onPress={() => void handleVoiceInput()}
           style={({ pressed }) => [
             styles.voiceButton,
             {
               backgroundColor: recorderState.isRecording ? theme.dangerSoft : theme.backgroundElement,
-              opacity: voiceBusy ? 0.55 : pressed ? 0.75 : 1,
+              opacity: voiceBusy || voiceSpeaking ? 0.55 : pressed ? 0.75 : 1,
             },
           ]}>
           {voiceBusy ? (
@@ -452,7 +472,7 @@ export default function InsightsScreen() {
           <Ionicons name="arrow-up" size={20} color={theme.onBrand} />
         </Pressable>
       </View>
-      {voiceError || chat.error || voiceBusy || recorderState.isRecording ? (
+      {voiceError || chat.error || voiceBusy || voiceSpeaking || recorderState.isRecording ? (
         <Text
           accessibilityRole={voiceError || chat.error ? 'alert' : undefined}
           style={[
@@ -464,9 +484,11 @@ export default function InsightsScreen() {
           ]}>
           {voiceError ??
             chat.error ??
-            (voiceBusy
-              ? 'Transcribing your recording…'
-              : 'Recording — tap the mic to stop (60 seconds max).')}
+            (voiceSpeaking
+              ? 'Reading your recorded message aloud…'
+              : voiceBusy
+                ? 'Transcribing your recording…'
+                : 'Recording — tap the mic to stop (60 seconds max).')}
         </Text>
       ) : null}
     </KeyboardAvoidingView>
